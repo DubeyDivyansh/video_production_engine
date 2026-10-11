@@ -105,7 +105,8 @@ class GeminiAgentSupervisor:
 
         # Audio metrics evaluation:
         # snr_db < 15.0 or clipping_ratio > 0.01
-        snr_db = float(audio_metrics.get("snr_db", 20.0))
+        snr_raw = audio_metrics.get("snr_db")
+        snr_db = float(snr_raw) if snr_raw is not None else 20.0
         clipping_ratio = audio_metrics.get("clipping_ratio")
         if clipping_ratio is None and "clipping_pct" in audio_metrics:
             clipping_ratio = float(audio_metrics["clipping_pct"]) / 100.0
