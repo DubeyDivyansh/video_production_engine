@@ -56,9 +56,12 @@ class VideoProductionPipeline:
         avatar_id: Optional[str] = None,
         ref_audio_path: Optional[str] = None,
         face_image_path: Optional[str] = None,
+        body_image_path: Optional[str] = None,
         base_video_path: Optional[str] = None,
         output_name: str = "production_video.mp4",
         engine: str = "latentsync",
+        motion_mode: str = "subtle_breathing",
+        studio_backdrop: str = "#FFFFFF",
         denoise_audio: bool = True,
         enhance_face: bool = False,
         replace_background: Optional[str] = None,
@@ -76,9 +79,12 @@ class VideoProductionPipeline:
             avatar_id: Optional ID of persistent avatar profile on Google Drive.
             ref_audio_path: Reference audio of user's voice (overrides avatar profile).
             face_image_path: Path to user's photo (overrides avatar profile).
+            body_image_path: Path to user's whole-body suit/pose image (overrides avatar profile).
             base_video_path: Path to base video with body movement (overrides avatar profile).
             output_name: Filename for the rendered MP4 video.
             engine: Engine choice ('latentsync', 'sadtalker', 'liveportrait', 'musetalk').
+            motion_mode: Motion dynamics for still body images ('subtle_breathing' or 'static_hold').
+            studio_backdrop: Hex color (default '#FFFFFF') for studio background canvas.
             denoise_audio: Whether to run spectral noise reduction and -16 LUFS mastering.
             enhance_face: Whether to apply GFPGAN face restoration & boundary softening.
             replace_background: Path to image or video to composite as background.
@@ -86,6 +92,7 @@ class VideoProductionPipeline:
             bgm_path: Path to background music track (MP3/WAV) to mix with auto-ducking.
             bgm_volume: Volume level of background music (default 0.15).
             add_subtitles: Whether to generate and burn styled subtitles into the video.
+            auto_verify: Whether to run automated quality inspection and verification report.
 
         Returns:
             Path to the final synchronized MP4 video.
@@ -105,6 +112,9 @@ class VideoProductionPipeline:
             if not face_image_path and profile.optimal_image_path:
                 face_image_path = profile.optimal_image_path
                 print(f"    - Using optimal image: {face_image_path}")
+            if not body_image_path and profile.optimal_body_pose_path:
+                body_image_path = profile.optimal_body_pose_path
+                print(f"    - Using optimal body pose: {body_image_path}")
             if not base_video_path and profile.optimal_video_path:
                 base_video_path = profile.optimal_video_path
                 print(f"    - Using optimal base video: {base_video_path}")
@@ -142,7 +152,22 @@ class VideoProductionPipeline:
         eng = engine.lower()
         if eng == "latentsync":
             if not base_video_path or not os.path.exists(base_video_path):
-                raise ValueError("LatentSync requires a valid 'base_video_path'.")
+                source_image = body_image_path or face_image_path
+                if source_image and os.path.exists(source_image):
+                    print(f"[*] Synthesizing full-body base video from image: {source_image} (mode: {motion_mode})...")
+                    from src.video.fullbody_animator import FullBodyAnimator
+                    animator = FullBodyAnimator(bg_color_hex=studio_backdrop)
+                    duration_s = self._get_audio_duration(cloned_wav)
+                    synth_video_path = os.path.join(self.workspace["outputs"], "fullbody_base_synth.mp4")
+                    animator.synthesize_base_video(
+                        image_path=source_image,
+                        duration_s=duration_s,
+                        output_video_path=synth_video_path,
+                        motion_mode=motion_mode,
+                    )
+                    base_video_path = synth_video_path
+                else:
+                    raise ValueError("LatentSync requires a valid 'base_video_path' or 'body_image_path'.")
             rendered_video = self.latentsync.sync_lips(
                 video_path=base_video_path,
                 audio_path=cloned_wav,
@@ -227,8 +252,24 @@ class VideoProductionPipeline:
             if os.path.exists(audit_dest) and self.use_drive:
                 copy_output_to_drive(audit_dest, os.path.basename(audit_dest))
 
-        # Step 7: Persist Final Delivery to Google Drive
         final_dest = copy_output_to_drive(current_video, output_name)
         print(f"\n🎉 Production complete! Video saved to: {final_dest}")
         return final_dest
+
+    def _get_audio_duration(self, audio_path: str) -> float:
+        """
+        Determines the precise duration in seconds of an audio file.
+        """
+        try:
+            import soundfile as sf
+            return float(sf.info(audio_path).duration)
+        except Exception:
+            try:
+                import wave
+                with wave.open(audio_path, "rb") as f:
+                    return float(f.getnframes()) / float(f.getframerate())
+            except Exception:
+                from .utils.media import get_media_duration
+                return float(get_media_duration(audio_path))
+
 

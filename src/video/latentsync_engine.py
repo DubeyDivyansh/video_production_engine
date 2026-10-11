@@ -86,3 +86,49 @@ class LatentSyncEngine:
         subprocess.run(cmd, cwd=self.repo_dir, check=True)
         print(f"[LatentSync] Successfully rendered: {output_video_path}")
         return output_video_path
+
+    def sync_lips_from_image(
+        self,
+        image_path: str,
+        audio_path: str,
+        output_video_path: str,
+        motion_mode: str = "subtle_breathing",
+        studio_backdrop: str = "#FFFFFF",
+        unet_config: str = "configs/unet/second_stage.yaml",
+        ckpt_path: str = "checkpoints/latentsync_unet.pt",
+    ) -> str:
+        """
+        Synthesizes a full-body base video from a portrait/pose image on a white studio canvas,
+        then performs diffusion lip-sync using LatentSync.
+        """
+        from .fullbody_animator import FullBodyAnimator
+        try:
+            import soundfile as sf
+            duration_s = float(sf.info(audio_path).duration)
+        except Exception:
+            import wave
+            with wave.open(audio_path, 'rb') as f:
+                duration_s = float(f.getnframes()) / float(f.getframerate())
+
+        temp_dir = os.path.dirname(os.path.abspath(output_video_path))
+        base_video_path = os.path.join(temp_dir, "temp_base_body_video.mp4")
+
+        animator = FullBodyAnimator(bg_color_hex=studio_backdrop)
+        animator.synthesize_base_video(
+            image_path=image_path,
+            duration_s=duration_s,
+            output_video_path=base_video_path,
+            motion_mode=motion_mode,
+        )
+
+        try:
+            return self.sync_lips(
+                video_path=base_video_path,
+                audio_path=audio_path,
+                output_video_path=output_video_path,
+                unet_config=unet_config,
+                ckpt_path=ckpt_path,
+            )
+        finally:
+            if os.path.exists(base_video_path):
+                os.remove(base_video_path)
