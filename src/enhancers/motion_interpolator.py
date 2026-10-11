@@ -28,6 +28,11 @@ class MotionInterpolator:
         """
         Executes optical-flow motion interpolation.
         Supports native rife-ncnn-vulkan CLI or high-quality FFmpeg minterpolate fallback.
+
+        Args:
+            video_path: Source input video (e.g. 24fps AI video).
+            output_path: Target video file path.
+            multiplier: Frame multiplication factor (defaults to 2 for 24fps->48/60fps target).
         """
         if not os.path.exists(video_path):
             raise FileNotFoundError(f"Input video not found: {video_path}")

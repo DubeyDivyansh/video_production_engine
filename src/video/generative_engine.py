@@ -191,7 +191,7 @@ class GenerativeVideoEngine:
                 if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_tiling"):
                     pipe.vae.enable_tiling()
 
-                generator = torch.Generator(device="cuda").manual_seed(seed)
+                generator = torch.Generator(device="cpu").manual_seed(seed)
                 output = pipe(
                     prompt_embeds=prompt_embeds,
                     prompt_attention_mask=prompt_attention_mask,
@@ -281,7 +281,7 @@ class GenerativeVideoEngine:
                 if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_tiling"):
                     pipe.vae.enable_tiling()
 
-                generator = torch.Generator(device="cuda").manual_seed(seed)
+                generator = torch.Generator(device="cpu").manual_seed(seed)
                 output = pipe(
                     prompt_embeds=prompt_embeds,
                     negative_prompt_embeds=neg_embeds,
