@@ -4,9 +4,13 @@ Flow-Matching Diffusion Transformer for faithful zero-shot voice synthesis.
 """
 
 import os
-import soundfile as sf
 import torch
 from ..utils.media import trim_audio_prompt
+
+try:
+    import soundfile as sf
+except ImportError:
+    sf = None
 
 
 class F5VoiceCloner:

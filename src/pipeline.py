@@ -1,14 +1,22 @@
 """
-Top-Level Video Production Pipeline Orchestrator
-Coordinates End-to-End Execution: Audio Synthesis -> VRAM Fence -> Video Generation -> Storage
+Top-Level Video Production Pipeline Orchestrator.
+Coordinates End-to-End Execution:
+Avatar Profile Resolution -> Audio Synthesis & Mastering -> VRAM Fence -> Video Generation -> Face Restoration -> Background Compositing -> Cloud Storage
 """
 
 import os
+from typing import Optional
+
 from .audio.f5_engine import F5VoiceCloner
 from .video.sadtalker_engine import SadTalkerEngine
 from .video.latentsync_engine import LatentSyncEngine
 from .video.liveportrait_engine import LivePortraitEngine
 from .video.musetalk_engine import MuseTalkEngine
+from .avatar.manager import AvatarManager
+from .enhancers.background import BackgroundReplacer
+from .enhancers.face_enhancer import FaceEnhancer
+from .enhancers.audio_enhancer import AudioEnhancer
+from .enhancers.studio_compositor import StudioCompositor
 from .utils.memory import flush_vram, check_gpu_status
 from .utils.storage import mount_google_drive, copy_output_to_drive, get_workspace_dirs
 
@@ -17,40 +25,64 @@ class VideoProductionPipeline:
     """
     Unified Production Pipeline for generating personalized AI videos.
     Designed for zero-cost, zero-OOM execution on Google Colab T4 GPU (16GB).
-    Supports multi-engine dispatching: SadTalker, LatentSync, LivePortrait, MuseTalk.
+    Supports:
+    - Persistent Avatar Knowledge Base (AvatarManager)
+    - Multi-engine dispatching: LatentSync, SadTalker, LivePortrait, MuseTalk
+    - Studio Compositor: Background removal/replacement, Face super-resolution, Audio mastering
     """
 
     def __init__(self, use_drive: bool = True):
         self.use_drive = use_drive
         if self.use_drive:
             mount_google_drive()
-        
+
         self.workspace = get_workspace_dirs()
+        self.avatar_manager = AvatarManager(use_drive=self.use_drive)
         self.voice_cloner = F5VoiceCloner()
         self.sadtalker = SadTalkerEngine()
         self.latentsync = LatentSyncEngine()
         self.liveportrait = LivePortraitEngine()
         self.musetalk = MuseTalkEngine()
+        self.bg_replacer = BackgroundReplacer()
+        self.face_enhancer = FaceEnhancer()
+        self.audio_enhancer = AudioEnhancer()
+        self.compositor = StudioCompositor()
 
     def produce_video(
         self,
         script_text: str,
-        ref_audio_path: str,
-        face_image_path: str = None,
-        base_video_path: str = None,
+        avatar_id: Optional[str] = None,
+        ref_audio_path: Optional[str] = None,
+        face_image_path: Optional[str] = None,
+        base_video_path: Optional[str] = None,
         output_name: str = "production_video.mp4",
         engine: str = "latentsync",
+        denoise_audio: bool = True,
+        enhance_face: bool = False,
+        replace_background: Optional[str] = None,
+        color_backdrop: Optional[str] = None,
+        bgm_path: Optional[str] = None,
+        bgm_volume: float = 0.15,
+        add_subtitles: bool = False,
     ) -> str:
         """
         Executes the full production pipeline from script to final video.
 
         Args:
-            script_text: The custom text to be spoken by the avatar.
-            ref_audio_path: Reference audio of user's voice for zero-shot cloning.
-            face_image_path: Path to user's photo (used for SadTalker / LivePortrait).
-            base_video_path: Path to base video with body movement (used for LatentSync / MuseTalk).
+            script_text: Custom text to be spoken by the avatar.
+            avatar_id: Optional ID of persistent avatar profile on Google Drive.
+            ref_audio_path: Reference audio of user's voice (overrides avatar profile).
+            face_image_path: Path to user's photo (overrides avatar profile).
+            base_video_path: Path to base video with body movement (overrides avatar profile).
             output_name: Filename for the rendered MP4 video.
             engine: Engine choice ('latentsync', 'sadtalker', 'liveportrait', 'musetalk').
+            denoise_audio: Whether to run spectral noise reduction and -16 LUFS mastering.
+            enhance_face: Whether to apply GFPGAN face restoration & boundary softening.
+            replace_background: Path to image or video to composite as background.
+            color_backdrop: Hex color (e.g., '#00FF00') to apply as solid background.
+            bgm_path: Path to background music track (MP3/WAV) to mix with auto-ducking.
+            bgm_volume: Volume level of background music (default 0.15).
+            add_subtitles: Whether to generate and burn styled subtitles into the video.
 
         Returns:
             Path to the final synchronized MP4 video.
@@ -60,8 +92,27 @@ class VideoProductionPipeline:
         print("=" * 60)
         check_gpu_status()
 
+        # Step 0: Resolve Avatar Profile Assets if avatar_id specified
+        if avatar_id:
+            profile = self.avatar_manager.get_avatar(avatar_id)
+            print(f"[*] Loaded Avatar Profile: '{avatar_id}'")
+            if not ref_audio_path and profile.optimal_audio_path:
+                ref_audio_path = profile.optimal_audio_path
+                print(f"    - Using optimal audio: {ref_audio_path}")
+            if not face_image_path and profile.optimal_image_path:
+                face_image_path = profile.optimal_image_path
+                print(f"    - Using optimal image: {face_image_path}")
+            if not base_video_path and profile.optimal_video_path:
+                base_video_path = profile.optimal_video_path
+                print(f"    - Using optimal base video: {base_video_path}")
+
+        if not ref_audio_path or not os.path.exists(ref_audio_path):
+            raise ValueError(
+                f"Valid reference audio is required. Provided: {ref_audio_path}"
+            )
+
         # Step 1: Synthesize Cloned Voice
-        print("\n--- [Phase 1/3] Voice Cloning (F5-TTS) ---")
+        print("\n--- [Phase 1/5] Voice Cloning (F5-TTS) ---")
         temp_audio_path = os.path.join(self.workspace["outputs"], "generated_speech.wav")
         cloned_wav = self.voice_cloner.clone_voice(
             ref_audio_path=ref_audio_path,
@@ -69,13 +120,20 @@ class VideoProductionPipeline:
             output_wav_path=temp_audio_path,
         )
 
-        # Step 2: Memory Fence - Unload audio model and purge VRAM
-        print("\n--- [Phase 2/3] VRAM Memory Fence ---")
+        # Step 2: Audio Mastering (Denoise + -16 LUFS)
+        if denoise_audio:
+            print("\n--- [Phase 2/5] Studio Audio Mastering ---")
+            mastered_wav = os.path.join(self.workspace["outputs"], "mastered_speech.wav")
+            self.audio_enhancer.master_speech(cloned_wav, mastered_wav)
+            cloned_wav = mastered_wav
+
+        # Step 3: VRAM Memory Fence
+        print("\n--- [Phase 3/5] VRAM Memory Fence ---")
         self.voice_cloner.unload()
         flush_vram()
 
-        # Step 3: Video Animation
-        print(f"\n--- [Phase 3/3] Video Animation Engine: {engine.upper()} ---")
+        # Step 4: Video Animation
+        print(f"\n--- [Phase 4/5] Video Animation Engine: {engine.upper()} ---")
         temp_video_dest = os.path.join(self.workspace["outputs"], output_name)
 
         eng = engine.lower()
@@ -117,11 +175,43 @@ class VideoProductionPipeline:
                 f"Unknown engine: {engine}. Choose from 'latentsync', 'sadtalker', 'liveportrait', 'musetalk'."
             )
 
-        # Step 4: Persist to Google Drive
-        final_video_path = copy_output_to_drive(rendered_video)
+        current_video = rendered_video
 
-        print("\n" + "=" * 60)
-        print("🎉 PRODUCTION PIPELINE COMPLETED SUCCESSFULLY!")
-        print(f"📁 Deliverable: {final_video_path}")
-        print("=" * 60)
-        return final_video_path
+        # Step 5: Post-Production Enhancers (Face Super-Resolution & Background Replacement)
+        print("\n--- [Phase 5/5] Studio Post-Processing ---")
+        if enhance_face:
+            print("[*] Applying Face Super-Resolution (GFPGAN)...")
+            enhanced_video = os.path.join(self.workspace["outputs"], f"enhanced_{output_name}")
+            current_video = self.face_enhancer.enhance_video(current_video, enhanced_video)
+
+        if replace_background and os.path.exists(replace_background):
+            print(f"[*] Replacing background with: '{replace_background}'...")
+            bg_video = os.path.join(self.workspace["outputs"], f"studio_{output_name}")
+            current_video = self.bg_replacer.replace_background(current_video, replace_background, bg_video)
+        elif color_backdrop:
+            # Parse hex color into BGR
+            hex_c = color_backdrop.lstrip("#")
+            rgb = tuple(int(hex_c[i:i+2], 16) for i in (0, 2, 4))
+            bgr = (rgb[2], rgb[1], rgb[0])
+            print(f"[*] Applying solid studio backdrop: {color_backdrop}...")
+            bg_video = os.path.join(self.workspace["outputs"], f"color_bg_{output_name}")
+            current_video = self.bg_replacer.apply_color_backdrop(current_video, bg_video, color_bgr=bgr)
+
+        if add_subtitles:
+            print("[*] Generating and burning styled subtitles...")
+            from .utils.media import get_media_duration
+            duration = get_media_duration(current_video)
+            srt_path = os.path.join(self.workspace["outputs"], "subtitles.srt")
+            self.compositor.generate_srt_from_script(script_text, duration, srt_path)
+            sub_video = os.path.join(self.workspace["outputs"], f"subtitled_{output_name}")
+            current_video = self.compositor.burn_subtitles(current_video, srt_path, sub_video)
+
+        if bgm_path and os.path.exists(bgm_path):
+            print(f"[*] Mixing background music: '{bgm_path}' with volume ducking...")
+            bgm_video = os.path.join(self.workspace["outputs"], f"bgm_{output_name}")
+            current_video = self.compositor.mix_bgm(current_video, bgm_path, bgm_video, bgm_volume=bgm_volume, enable_ducking=True)
+
+        # Step 6: Persist Final Delivery to Google Drive
+        final_dest = copy_output_to_drive(current_video, output_name)
+        print(f"\n✅ Production complete! Video saved to: {final_dest}")
+        return final_dest

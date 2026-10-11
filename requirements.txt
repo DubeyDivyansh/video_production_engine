@@ -10,8 +10,8 @@ f5-tts>=0.1.5
 vocos>=0.1.0
 soundfile>=0.12.1
 
-# Video Diffusion & Lip-Sync (LatentSync & SadTalker)
-diffusers==0.32.2
+# Video Diffusion & Lip-Sync (LatentSync & SadTalker & LivePortrait)
+diffusers>=0.32.0
 transformers>=4.48.0
 decord>=0.6.0
 accelerate>=0.26.1
@@ -30,3 +30,8 @@ basicsr>=1.4.2
 facexlib>=0.3.0
 pydub>=0.25.1
 tqdm>=4.66.0
+
+# Studio Compositor & Enhancers
+rembg>=2.0.50
+noisereduce>=3.0.0
+pyloudnorm>=0.1.1

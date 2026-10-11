@@ -1,10 +1,29 @@
-"""
-Media Utilities (FFmpeg wrappers, audio slicing, and downloader)
-"""
-
 import os
 import subprocess
 import urllib.request
+import shutil
+
+
+def check_ffmpeg() -> bool:
+    """Checks if ffmpeg binary is accessible in system PATH."""
+    if shutil.which("ffmpeg") is None:
+        raise RuntimeError("FFmpeg is not installed or not found in system PATH.")
+    return True
+
+
+def get_media_duration(file_path: str) -> float:
+    """Returns the duration of a video or audio file in seconds via ffprobe."""
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        file_path,
+    ]
+    try:
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        return float(res.stdout.strip())
+    except Exception:
+        return 10.0  # Fallback duration if ffprobe cannot read stream
 
 
 def extract_audio_from_video(video_path: str, output_wav_path: str, sample_rate: int = 16000) -> str:
