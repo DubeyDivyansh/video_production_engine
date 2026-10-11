@@ -17,6 +17,7 @@ from .enhancers.background import BackgroundReplacer
 from .enhancers.face_enhancer import FaceEnhancer
 from .enhancers.audio_enhancer import AudioEnhancer
 from .enhancers.studio_compositor import StudioCompositor
+from .verification.inspector import QualityInspector, VerificationReport
 from .utils.memory import flush_vram, check_gpu_status
 from .utils.storage import mount_google_drive, copy_output_to_drive, get_workspace_dirs
 
@@ -47,6 +48,7 @@ class VideoProductionPipeline:
         self.face_enhancer = FaceEnhancer()
         self.audio_enhancer = AudioEnhancer()
         self.compositor = StudioCompositor()
+        self.inspector = QualityInspector()
 
     def produce_video(
         self,
@@ -64,6 +66,7 @@ class VideoProductionPipeline:
         bgm_path: Optional[str] = None,
         bgm_volume: float = 0.15,
         add_subtitles: bool = False,
+        auto_verify: bool = True,
     ) -> str:
         """
         Executes the full production pipeline from script to final video.
@@ -211,7 +214,21 @@ class VideoProductionPipeline:
             bgm_video = os.path.join(self.workspace["outputs"], f"bgm_{output_name}")
             current_video = self.compositor.mix_bgm(current_video, bgm_path, bgm_video, bgm_volume=bgm_volume, enable_ducking=True)
 
-        # Step 6: Persist Final Delivery to Google Drive
+        # Step 6: Autonomous Quality Verification
+        if auto_verify:
+            print("\n--- [Phase 6/6] Autonomous Quality Verification ---")
+            report = self.inspector.audit_deliverable(
+                video_path=current_video,
+                speech_wav_path=cloned_wav,
+                script_text=script_text,
+            )
+            report.print_summary()
+            audit_dest = os.path.splitext(current_video)[0] + "_quality_audit.json"
+            if os.path.exists(audit_dest) and self.use_drive:
+                copy_output_to_drive(audit_dest, os.path.basename(audit_dest))
+
+        # Step 7: Persist Final Delivery to Google Drive
         final_dest = copy_output_to_drive(current_video, output_name)
-        print(f"\n✅ Production complete! Video saved to: {final_dest}")
+        print(f"\n🎉 Production complete! Video saved to: {final_dest}")
         return final_dest
+

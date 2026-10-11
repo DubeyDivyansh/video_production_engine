@@ -122,5 +122,82 @@ class TestAvatarIntegration(unittest.TestCase):
         self.assertLess(mask[5, 5], 50)
 
 
+class TestQualityInspector(unittest.TestCase):
+    def setUp(self):
+        from src.verification.inspector import QualityInspector, VerificationReport
+        self.QualityInspector = QualityInspector
+        self.VerificationReport = VerificationReport
+
+    def _create_synthetic_wav(self, file_path: str, duration_sec: float = 2.0, sr: int = 16000, clip: bool = False):
+        import wave
+        import struct
+        import math
+        n_samples = int(duration_sec * sr)
+        with wave.open(file_path, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(sr)
+            frames = bytearray()
+            for i in range(n_samples):
+                # Simulate speech with an initial pause (0.3s)
+                if i < int(0.3 * sr):
+                    sample = 0
+                else:
+                    val = math.sin(2 * math.pi * 440 * (i / sr))
+                    if clip and i > n_samples // 2:
+                        sample = 32767  # Max clipping
+                    else:
+                        sample = int(val * 16000)
+                frames.extend(struct.pack("<h", sample))
+            w.writeframes(frames)
+
+    def test_audio_inspection_and_metrics(self):
+        inspector = self.QualityInspector()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            wav_path = os.path.join(tmp_dir, "test_audio.wav")
+            self._create_synthetic_wav(wav_path, duration_sec=2.0)
+            
+            metrics, warnings, errors = inspector.inspect_audio_file(wav_path, script_text="Hello world speech test")
+            self.assertEqual(len(errors), 0)
+            self.assertAlmostEqual(metrics["duration"], 2.0, places=1)
+            self.assertGreater(metrics["snr_db"], 10.0)
+            self.assertLess(metrics["clipping_pct"], 0.1)
+
+    def test_audio_clipping_detection(self):
+        inspector = self.QualityInspector()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            clipped_wav = os.path.join(tmp_dir, "clipped.wav")
+            self._create_synthetic_wav(clipped_wav, duration_sec=1.0, clip=True)
+            
+            metrics, warnings, errors = inspector.inspect_audio_file(clipped_wav)
+            self.assertGreater(metrics["clipping_pct"], 10.0)
+            self.assertTrue(any("clipping" in w for w in warnings))
+
+    def test_av_sync_detection(self):
+        inspector = self.QualityInspector()
+        audio_m = {"duration": 10.0}
+        video_m = {"duration": 8.0}
+        sync_m, warnings, errors = inspector.inspect_av_sync("dummy.mp4", audio_m, video_m)
+        self.assertAlmostEqual(sync_m["av_duration_delta"], 2.0)
+        self.assertTrue(any("mismatch" in w for w in warnings))
+
+    def test_verification_report_save_and_remediations(self):
+        inspector = self.QualityInspector()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            wav_path = os.path.join(tmp_dir, "clean.wav")
+            self._create_synthetic_wav(wav_path, duration_sec=1.5)
+            
+            report = inspector.audit_deliverable(
+                video_path=os.path.join(tmp_dir, "mock_video.mp4"),
+                speech_wav_path=wav_path,
+                script_text="Hello Divyansh here",
+                save_report=True,
+            )
+            self.assertIsInstance(report, self.VerificationReport)
+            report_file = os.path.join(tmp_dir, "mock_video_quality_audit.json")
+            self.assertTrue(os.path.exists(report_file))
+
+
 if __name__ == "__main__":
     unittest.main()
+
