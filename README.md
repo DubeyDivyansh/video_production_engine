@@ -29,6 +29,7 @@
   * **Face Super-Resolution (`FaceEnhancer`):** GFPGAN v1.4 facial upscaling and boundary blending.
   * **Audio Mastering (`AudioEnhancer`):** Spectral noise gating and EBU R128 (-16 LUFS) broadcast loudness normalization.
   * **Dynamic BGM & Subtitles (`StudioCompositor`):** Sidechain voice ducking (lowers background music during speech) and styled subtitle burn-in.
+* **🛡️ Autonomous Quality Verification (`QualityInspector`):** Automated objective QA inspector that audits Audio (SNR, peak dBFS, RMS, digital clipping, speaking pace WPM), Video (face presence %, Laplacian sharpness, motion stability, freeze frames), and AV sync before human review. Generates structured JSON scorecards and actionable remediation steps.
 * **🧹 Deterministic VRAM Memory Fence:** Automatically unloads heavy models, triggers garbage collection, and clears PyTorch CUDA cache between stages, preventing Out-Of-Memory (OOM) crashes on 16GB GPUs.
 * **💾 Google Drive Persistence:** Checkpoints (~5.5 GB), avatar profiles, and rendered outputs are persisted in Google Drive so you never re-download models when ephemeral Colab sessions reset.
 
@@ -83,7 +84,17 @@
 └──────────────────────────────┬──────────────────────────────┘
                                │
                                ▼
-      🎉 Final Mastered MP4 Persisted to Google Drive!
+┌─────────────────────────────────────────────────────────────┐
+│ 6. Autonomous Quality Verification (QualityInspector)       │
+│ - Objective Audio Audit (SNR, Peak, RMS, Digital Clipping)   │
+│ - Video Audit (Face Detection %, Laplacian Sharpness, Jitter)│
+│ - Sync Audit (AV duration delta & lip motion)               │
+│ - Export: <deliverable>_quality_audit.json                  │
+│ Memory: CPU Execution (< 1.0s)                              │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+                               ▼
+      🎉 Final Mastered MP4 & Audit Report to Google Drive!
 ```
 
 ---
@@ -105,6 +116,7 @@
 | **Restoration** | **GFPGAN v1.4** | **KEEP (Primary)** | ✅ Compatible (~1.8 GB VRAM) | Rapid facial super-resolution (~18s for 300 frames). Restores eye, teeth, and skin clarity. |
 | **Audio Mastering**| **noisereduce + pyloudnorm** | **KEEP (Primary)** | ✅ 100% Compatible (CPU only) | Eliminates mic hiss and normalizes loudness to broadcast EBU R128 (-16 LUFS) in 0.5s. |
 | **Compositing** | **MoneyPrinterTurbo / FFmpeg** | **INTEGRATED** | ✅ 100% Compatible (CPU only) | Battle-tested BGM mixing with sidechain audio ducking and styled subtitle burn-in. |
+| **Quality QA** | **QualityInspector** | **INTEGRATED** | ✅ 100% Compatible (CPU only) | Multi-modal heuristic QA layer (Audio SNR/clipping, Face presence, Sharpness, AV Sync). |
 
 ---
 
@@ -141,6 +153,9 @@ video_production_engine/
 │   │   ├── face_enhancer.py           # GFPGAN facial super-resolution
 │   │   ├── audio_enhancer.py          # Spectral denoiser & -16 LUFS loudness
 │   │   └── studio_compositor.py       # Dynamic BGM ducking & subtitle burn-in
+│   ├── verification/                  # 🛡️ Autonomous Quality Inspection Layer
+│   │   ├── __init__.py
+│   │   └── inspector.py               # QualityInspector & VerificationReport
 │   ├── utils/                         # Infrastructure & guards
 │   │   ├── __init__.py
 │   │   ├── memory.py                  # VRAM fence & allocator config
@@ -148,7 +163,7 @@ video_production_engine/
 │   │   └── media.py                   # FFmpeg prompt slicing & duration inspectors
 │   └── pipeline.py                    # ⚡ VideoProductionPipeline (Top-level orchestrator)
 └── tests/
-    └── test_avatar_system.py          # Unit tests for avatar manager & studio suite
+    └── test_avatar_system.py          # Unit tests for avatar, enhancers, & inspector
 ```
 
 ---
