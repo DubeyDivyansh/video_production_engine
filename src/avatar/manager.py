@@ -298,6 +298,14 @@ class AvatarManager:
                 profile.optimal_image_path = optimal_img
                 profile.optimal_image_score = score
 
+        elif media_type == "body_pose":
+            score, metrics = self.score_image(file_path)
+            if score > profile.optimal_body_pose_score or profile.optimal_body_pose_path is None:
+                optimal_body = os.path.join(avatar_dir, "processed", "optimal_body_pose.jpg")
+                shutil.copy2(file_path, optimal_body)
+                profile.optimal_body_pose_path = optimal_body
+                profile.optimal_body_pose_score = score
+
         elif media_type == "video":
             score, metrics = self.score_video(file_path)
             if score > profile.optimal_video_score or profile.optimal_video_path is None:

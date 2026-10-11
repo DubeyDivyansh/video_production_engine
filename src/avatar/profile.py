@@ -38,6 +38,8 @@ class AvatarProfile:
     optimal_video_score: float = -1.0
     optimal_image_path: Optional[str] = None
     optimal_image_score: float = -1.0
+    optimal_body_pose_path: Optional[str] = None
+    optimal_body_pose_score: float = -1.0
     embedding_paths: Dict[str, str] = field(default_factory=dict)
     raw_assets: List[MediaAsset] = field(default_factory=list)
     custom_configs: Dict[str, Any] = field(default_factory=dict)

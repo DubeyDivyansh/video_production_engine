@@ -31,6 +31,8 @@ class TestAvatarProfile(unittest.TestCase):
                 avatar_id="divyansh_test",
                 optimal_audio_path="/content/optimal.wav",
                 optimal_audio_score=45.2,
+                optimal_body_pose_path="/content/suit.jpg",
+                optimal_body_pose_score=85.0,
                 raw_assets=[
                     MediaAsset(
                         file_path="/content/a.wav",
@@ -47,6 +49,8 @@ class TestAvatarProfile(unittest.TestCase):
             loaded = AvatarProfile.load(save_file)
             self.assertEqual(loaded.avatar_id, "divyansh_test")
             self.assertEqual(loaded.optimal_audio_score, 45.2)
+            self.assertEqual(loaded.optimal_body_pose_path, "/content/suit.jpg")
+            self.assertEqual(loaded.optimal_body_pose_score, 85.0)
             self.assertEqual(len(loaded.raw_assets), 1)
             self.assertEqual(loaded.raw_assets[0].file_path, "/content/a.wav")
 
