@@ -127,11 +127,18 @@ video_production_engine/
 ├── GEMINI.md                          # 🤖 Machine-readable agent directive & VRAM rules
 ├── README.md                          # 📖 Project documentation & API guide
 ├── requirements.txt                   # 📦 Production pip dependencies
-├── quick_demo.ipynb                   # 🚀 1-Click Interactive Colab Runner
-├── notebooks/
-│   └── quick_demo.ipynb               # Colab notebook backup
+├── quick_demo.ipynb                   # 🚀 All-in-One Interactive Colab Runner
+├── 01_avatar_knowledge_base.ipynb     # 🧠 Avatar KB & Drive Asset Ingestion (0 GPU Quota)
+├── 02_talking_head_studio.ipynb       # 👤 Fast 2D Talking-Head Studio (< 5 mins)
+├── 03_fullbody_latentsync_studio.ipynb# 🕴️ Whole-Body LatentSync Studio (#FFFFFF White Backdrop)
+├── notebooks/                         # Version-controlled notebook backups
+│   ├── 01_avatar_knowledge_base.ipynb
+│   ├── 02_talking_head_studio.ipynb
+│   ├── 03_fullbody_latentsync_studio.ipynb
+│   └── quick_demo.ipynb
 ├── scripts/
-│   └── generate_notebook.py           # Notebook generator & validator
+│   ├── generate_notebook.py           # All-in-one notebook generator
+│   └── generate_modular_notebooks.py  # Modular suite generator
 ├── src/
 │   ├── __init__.py
 │   ├── audio/                         # Voice synthesis engines
@@ -139,6 +146,7 @@ video_production_engine/
 │   │   └── f5_engine.py               # F5VoiceCloner wrapper
 │   ├── video/                         # Video & animation engines
 │   │   ├── __init__.py
+│   │   ├── fullbody_animator.py       # 🕴️ Whole-body white canvas & breathing motion
 │   │   ├── latentsync_engine.py       # LatentSync whole-body engine (sm_75 patched)
 │   │   ├── liveportrait_engine.py     # LivePortrait photorealistic portrait engine
 │   │   ├── sadtalker_engine.py        # SadTalker 3DMM + GFPGAN engine
@@ -158,12 +166,14 @@ video_production_engine/
 │   │   └── inspector.py               # QualityInspector & VerificationReport
 │   ├── utils/                         # Infrastructure & guards
 │   │   ├── __init__.py
+│   │   ├── colab_quota.py             # ⚡ Multi-account quota monitor & switchover alert
 │   │   ├── memory.py                  # VRAM fence & allocator config
 │   │   ├── storage.py                 # Google Drive persistence manager
 │   │   └── media.py                   # FFmpeg prompt slicing & duration inspectors
 │   └── pipeline.py                    # ⚡ VideoProductionPipeline (Top-level orchestrator)
 └── tests/
-    └── test_avatar_system.py          # Unit tests for avatar, enhancers, & inspector
+    ├── test_avatar_system.py          # Unit tests for avatar, enhancers, & inspector
+    └── test_fullbody_animator.py      # Unit tests for mod-16 padding & motion curves
 ```
 
 ---
