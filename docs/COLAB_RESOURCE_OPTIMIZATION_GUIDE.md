@@ -115,9 +115,13 @@ Running these checks on CPU takes 0.2 seconds and prevents a 4-minute diffusion 
 
 ---
 
-## 👥 5. Multi-Account Scaling Architecture (Unlimited Continuous Generation)
+## 👥 5. Multi-Account Scaling Architecture & Automated Quota Switchover
 
-If your daily video production requires more than 4–5 hours of GPU time per day, use a **Multi-Account Drive Sharing Topology**:
+### 📈 1-Account vs. Multi-Account Capacity Multipliers
+All baseline benchmarks and limits throughout this guide are measured for **1 single Google/Gmail account**:
+* **1 Account (Baseline):** ~4.0 to 4.5 hours of active GPU time / day (~25 to 30 master video runs of 22s each).
+* **2 Accounts (2× Scale):** If you log in via an alternate Gmail account, your compute capacity immediately doubles to **~8.0 to 9.0 hours of active GPU time / day (~50 to 60 master video runs)**.
+* **3 Accounts (3× Scale):** **~12.0 to 13.5 hours of active GPU time / day (~75 to 90 master video runs)**, allowing continuous round-the-clock studio generation without ever paying for compute.
 
 ```
                      ┌─────────────────────────────────────────┐
@@ -127,24 +131,63 @@ If your daily video production requires more than 4–5 hours of GPU time per da
                      │ - avatars/      (persistent profiles)   │
                      │ - outputs/      (all rendered MP4s)     │
                      └────────────────────┬────────────────────┘
-                                          │ Shared with View/Edit
+                                          │ Shared with Editor Access
             ┌─────────────────────────────┼─────────────────────────────┐
-            ▼                             ▼                             ▼
+            ▼ (1x Baseline)               ▼ (2x Scaled)                 ▼ (3x Scaled)
 ┌───────────────────────┐   ┌───────────────────────┐   ┌───────────────────────┐
-│ Google Account A      │   │ Google Account B      │   │ Google Account C      │
-│ (Primary Session)     │   │ (Standby / Rotation)  │   │ (Backup)              │
-│ Quota: Hours 0 – 4    │   │ Quota: Hours 4 – 8    │   │ Quota: Hours 8 – 12   │
+│ Gmail Account A       │   │ Gmail Account B       │   │ Gmail Account C       │
+│ (Primary Session)     │   │ (Secondary Session)   │   │ (Tertiary Session)    │
+│ Capacity: ~4.5h GPU   │   │ Capacity: +4.5h (9.0h)│   │ Capacity: +4.5h (13.5h│
+│ Yield: ~25-30 videos  │   │ Yield: ~50-60 videos  │   │ Yield: ~75-90 videos  │
 └───────────────────────┘   └───────────────────────┘   └───────────────────────┘
 ```
 
-### Setup Instructions (3 Steps):
+---
+
+### 🚨 Automated Exhaustion Detection & Account Switchover Trigger
+
+When running jobs autonomously or through Antigravity / the browser agent, the system actively monitors the Colab runtime status for GPU allocation ceilings.
+
+#### Detection Signals Monitored:
+1. **Colab Modal:** `"Cannot connect to GPU backend"`
+2. **Usage Limit Alert:** `"You cannot connect to a GPU due to usage limits in Colab"`
+3. **HTTP Status:** 429 / 503 responses from Colab kernel allocation endpoints
+4. **PyTorch Driver Error:** `CUDA driver initialization failed: no device available` or `RuntimeError: No CUDA GPUs are available`
+
+#### The Automated Switchover Protocol:
+When any of the above exhaustion signals are detected, the system immediately executes the **Account Switchover Trigger**:
+
+```
+================================================================================
+🚨 [COLAB QUOTA EXHAUSTION DETECTED ON ACCOUNT A]
+================================================================================
+• Status: Daily GPU allocation for current Gmail account has been depleted.
+• Recovery: Cooldown initiated on Account A (auto-resets in 12–18 hours).
+
+🔄 ACTION REQUIRED: SWITCH TO ACCOUNT B FOR 2X COMPUTE RUN
+--------------------------------------------------------------------------------
+1. Open a browser window / profile logged into your secondary Gmail (Account B).
+2. Open quick_demo.ipynb:
+   👉 https://colab.research.google.com/github/DubeyDivyansh/DubeyDivyansh/blob/main/quick_demo.ipynb
+3. Connect to a T4 GPU runtime.
+4. Run Section 1 (Mount Google Drive).
+   - Because '/MyDrive/video_gen_platform' is shared as a shortcut, Account B
+     instantly mounts all cached checkpoints, avatar assets, and previous outputs.
+   - Setup time: < 5 seconds (Zero re-downloading or re-registration).
+5. Resume your video production queue seamlessly!
+================================================================================
+```
+
+---
+
+### Setup Instructions for Shared Drive Access (One-Time 2-Minute Setup):
 1. **Create the Master Folder on Account A:**
    Create `/MyDrive/video_gen_platform` on your primary Google Drive.
 2. **Share with Account B & C:**
    Right-click `video_gen_platform` $\to$ Share $\to$ Add your secondary Google account emails $\to$ Grant **Editor** access.
 3. **Add Shortcut to Secondary Drives:**
    Log into Account B $\to$ Go to "Shared with me" $\to$ Right-click `video_gen_platform` $\to$ Select **"Add shortcut to Drive"** $\to$ Place in `My Drive`.
-   * Result: Account B and Account C now access the **exact same model weights, avatar profiles, and outputs** with zero re-downloading or re-registration!
+   * **Result:** Account B accesses the **exact same model weights, avatar profiles, and outputs** with zero re-downloading!
 
 ---
 
@@ -180,5 +223,38 @@ runtime.unassign()  # Instantly disconnects VM and halts quota consumption
 - [ ] 5. Run Section 3 (Avatar Ingestion) -> auto-scores new media if provided.
 - [ ] 6. Run Section 4 (Studio Production Run) -> generates voice, lip-sync, face restoration, background swap, and subtitles in ~5 minutes.
 - [ ] 7. Preview output in Section 5 inline player.
-- [ ] 8. Execute `runtime.unassign()` or Disconnect Runtime to preserve daily priority score.
+- [ ] 8. Save executed notebook with output cells: Click File -> Save a copy in GitHub.
+- [ ] 9. Execute `runtime.unassign()` or Disconnect Runtime to preserve daily priority score.
 ```
+
+---
+
+## 💾 8. Automated Output Persistence & GitHub State Synchronization
+
+Colab's web UI executes cells inside an ephemeral virtual machine. Cell outputs (scorecards, logs, video previews) exist in the browser session and Google Drive, but **do not automatically push back to GitHub by default without an explicit save**.
+
+To ensure 100% of your outputs, execution logs, and deliverables are automatically preserved across all future runs, the engine employs a **3-Tier Persistence Architecture**:
+
+### Tier 1: Automatic Google Drive Mirroring (Zero Human Effort)
+Every call to `pipeline.produce_video()` automatically commits the rendered deliverables and audits:
+* **Master MP4 Video:** `/content/drive/MyDrive/video_gen_platform/outputs/<output_name>.mp4`
+* **Quality Scorecard JSON:** `/content/drive/MyDrive/video_gen_platform/outputs/<output_name>_quality_audit.json`
+* **Mastered Voice Track:** `/content/drive/MyDrive/video_gen_platform/outputs/mastered_speech.wav`
+* **Time-Coded Subtitles:** `/content/drive/MyDrive/video_gen_platform/outputs/subtitles.srt`
+* **Avatar Profile State:** `/content/drive/MyDrive/video_gen_platform/avatars/divyansh/avatar_profile.json`
+
+Even if your session terminates abruptly, **zero data is lost**.
+
+### Tier 2: 1-Click Save Executed Notebook with Output Cells to GitHub
+To preserve the interactive rendered notebook (with output cells, stdout logs, and HTML scorecard) directly in your GitHub repo history:
+1. In Colab, click **File $\to$ Save a copy in GitHub...** (or the blue header button **`💾 Save in GitHub to keep changes`**).
+2. Choose Repository: `DubeyDivyansh/video_production_engine` (or `DubeyDivyansh/DubeyDivyansh`).
+3. Set commit message: `chore: save executed demo run with verification outputs`.
+4. Check **"Include a link to Colaboratory"** and click **OK**.
+
+### Tier 3: Automated Browser Agent Synchronization
+When Antigravity or a browser agent executes a run autonomously:
+1. The agent extracts the executed `.ipynb` with full cell outputs via `File -> Download -> Download .ipynb`.
+2. Automatically commits the output-populated notebook to `git` and pushes to `origin/main`.
+3. Future runs pull the latest profile metadata directly, maintaining continuous end-to-end memory.
+

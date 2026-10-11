@@ -49,6 +49,12 @@ outputs/
 .tmp/
 temp/
 
+# Whitelist avatar reference assets
+!assets/
+!assets/**
+!divyansh_suit_body_pose.jpg
+
+
 # IDE & Editor configs
 .vscode/
 .idea/

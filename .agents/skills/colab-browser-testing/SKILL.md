@@ -73,7 +73,7 @@ Required MCP tools:
 │ 6. Quota Conservation & Teardown                            │
 │ - Unload models / flush VRAM                                │
 │ - Explicitly disconnect runtime when batch finishes         │
-└──────────────────────────────┬──────────────────────────────┘
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -238,6 +238,24 @@ To prevent burning the user's rolling daily 3.5–5 hour T4 GPU quota:
    from google.colab import runtime
    runtime.unassign()
    ```
+
+### Step 8: Multi-Account 2× Scaling & Exhaustion Switchover
+
+* **1-Account Baseline vs Multi-Account Multiplier:**
+  - 1 Gmail account yields ~4.5h GPU time / ~25-30 master videos per day.
+  - Logging in via a second Gmail account **doubles capacity to 2× (~9.0 hours GPU / ~50-60 master videos)**.
+  - $N$ Gmail accounts yield $N \times 4.5$ hours daily.
+* **Automated Exhaustion Detection:**
+  If the browser agent encounters `"Cannot connect to GPU backend"`, `"usage limits in colab"`, or `"Resource limit reached"`, it must:
+  1. Halt execution on Account A.
+  2. Fire an actionable alert prompting the user:
+     ```
+     🚨 COLAB GPU QUOTA EXHAUSTED ON ACCOUNT A!
+     🔄 SWITCH TO ACCOUNT B:
+     1. Open quick_demo.ipynb in an incognito or alternate browser profile logged into Account B.
+     2. Mount Google Drive in Section 1 (shared /MyDrive/video_gen_platform folder).
+     3. Resume generation immediately with 0 re-downloads.
+     ```
 
 ---
 
