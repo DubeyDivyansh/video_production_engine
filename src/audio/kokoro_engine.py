@@ -40,36 +40,49 @@ class KokoroEngine:
         self.device = device
         self.sample_rate = 24000
         self.available_voices = self.AVAILABLE_VOICES
-        self._pipeline = None
+        self._pipelines = {}
+
+    @property
+    def _pipeline(self):
+        """Backwards compatibility accessor for default pipeline."""
+        return self._pipelines.get("a") if self._pipelines else None
+
+    @_pipeline.setter
+    def _pipeline(self, val):
+        if val is None:
+            self._pipelines.clear()
+        else:
+            self._pipelines["a"] = val
 
     def _load_pipeline(self, lang_code: str = "a"):
         """
-        Lazily instantiates the Kokoro pipeline without occupying VRAM.
+        Lazily instantiates the Kokoro pipeline per language code without occupying VRAM.
         Falls back cleanly to mock/simulation if weights or library are absent.
         """
-        if self._pipeline is None:
+        if lang_code not in self._pipelines:
             try:
                 from kokoro import KPipeline
-                self._pipeline = KPipeline(lang_code=lang_code)
+                self._pipelines[lang_code] = KPipeline(lang_code=lang_code, device=self.device)
             except Exception:
                 # Fallback to simulation/mock if library not installed or weights unavailable
-                self._pipeline = "MOCK_OR_FALLBACK"
+                self._pipelines[lang_code] = "MOCK_OR_FALLBACK"
+        return self._pipelines[lang_code]
 
     def _generate_raw_audio(self, text: str, voice: str = "af_heart", speed: float = 1.0) -> np.ndarray:
         """
         Generates raw waveform audio samples at 24kHz.
         """
         lang_code = "b" if voice.startswith("b") else "a"
-        self._load_pipeline(lang_code=lang_code)
+        pipeline = self._load_pipeline(lang_code=lang_code)
 
-        if self._pipeline == "MOCK_OR_FALLBACK" or self._pipeline is None:
+        if pipeline == "MOCK_OR_FALLBACK" or pipeline is None:
             # Generate 1.5s clean silence for offline resilience & testing
             return np.zeros(int(self.sample_rate * 1.5), dtype=np.float32)
 
-        generator = self._pipeline(text, voice=voice, speed=speed, split_pattern=r'\n+')
+        generator = pipeline(text, voice=voice, speed=speed, split_pattern=r'\n+')
         all_audio = []
         for _, _, audio in generator:
-            all_audio.append(audio)
+            all_audio.append(np.asarray(audio, dtype=np.float32))
         if not all_audio:
             return np.zeros(int(self.sample_rate), dtype=np.float32)
         return np.concatenate(all_audio)
@@ -104,4 +117,5 @@ class KokoroEngine:
         """
         Unloads pipeline references to ensure zero residual memory.
         """
-        self._pipeline = None
+        self._pipelines.clear()
+
