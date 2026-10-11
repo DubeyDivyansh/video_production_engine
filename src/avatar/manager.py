@@ -7,8 +7,10 @@ and persistent Google Drive synchronization.
 import os
 import shutil
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple, Any
+import re
+import urllib.request
 
 try:
     import cv2
@@ -188,17 +190,67 @@ class AvatarManager:
             metrics["error"] = str(e)
             return 0.0, metrics
 
-    # --- Media Registration & Continuous Calibration ---
+    def download_drive_file(self, drive_url_or_id: str, dest_path: Optional[str] = None) -> str:
+        """
+        Downloads a shared Google Drive file using its URL or File ID.
+        Works in both local and Colab environments without requiring authentication tokens.
+        """
+        # Extract File ID from full URL (e.g., https://drive.google.com/file/d/<ID>/view)
+        match = re.search(r"[-_\w]{25,}", drive_url_or_id)
+        file_id = match.group(0) if match else drive_url_or_id
+
+        url = f"https://drive.google.com/uc?export=download&id={file_id}"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+
+        with urllib.request.urlopen(req) as resp:
+            content_disp = resp.headers.get("Content-Disposition", "")
+            fname_match = re.search(r'filename="?([^";]+)"?', content_disp)
+            filename = fname_match.group(1) if fname_match else f"{file_id}.mkv"
+
+            if not dest_path:
+                temp_dir = os.path.join(self.base_dir, ".tmp")
+                os.makedirs(temp_dir, exist_ok=True)
+                dest_path = os.path.join(temp_dir, filename)
+
+            os.makedirs(os.path.dirname(os.path.abspath(dest_path)), exist_ok=True)
+            with open(dest_path, "wb") as out:
+                shutil.copyfileobj(resp, out)
+
+        return dest_path
+
+    def ingest_drive_url(
+        self,
+        avatar_id: str,
+        drive_url_or_id: str,
+        media_type: str = "auto",
+        extract_video_audio: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Downloads a file from Google Drive and registers it into the persistent Avatar Profile.
+        If a video is downloaded, automatically extracts and scores its audio track.
+        """
+        print(f"[*] Downloading asset from Google Drive: {drive_url_or_id}...")
+        downloaded_file = self.download_drive_file(drive_url_or_id)
+        print(f"[✓] Asset downloaded: {downloaded_file}")
+        return self.register_media(
+            avatar_id=avatar_id,
+            file_path=downloaded_file,
+            media_type=media_type,
+            extract_video_audio=extract_video_audio,
+        )
 
     def register_media(
         self,
         avatar_id: str,
         file_path: str,
-        media_type: str = "auto"
+        media_type: str = "auto",
+        extract_video_audio: bool = True,
     ) -> Dict[str, Any]:
         """
         Ingests user media, computes quality score, archives file to Drive,
         and auto-updates optimal reference slices if the new asset is higher quality.
+        If a video is ingested and extract_video_audio=True, also extracts, scores,
+        and records its speech audio track.
         """
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"Source file not found: {file_path}")
@@ -216,7 +268,7 @@ class AvatarManager:
 
         avatar_dir = self.get_avatar_dir(avatar_id)
         profile = self.get_avatar(avatar_id)
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         orig_name = os.path.basename(file_path)
         dest_filename = f"{timestamp}_{orig_name}"
 
@@ -254,12 +306,42 @@ class AvatarManager:
                 profile.optimal_video_path = optimal_vid
                 profile.optimal_video_score = score
 
+            # Automatically extract, score, and register audio track from video
+            if extract_video_audio:
+                extracted_audio_name = f"{timestamp}_{os.path.splitext(orig_name)[0]}_extracted.wav"
+                extracted_audio_path = os.path.join(avatar_dir, "raw", "audios", extracted_audio_name)
+                try:
+                    from src.utils.media import extract_audio_from_video
+                    extract_audio_from_video(file_path, extracted_audio_path, sample_rate=24000)
+                    a_score, a_metrics = self.score_audio(extracted_audio_path)
+                    print(f"[*] Extracted audio from video: quality score = {a_score:.2f}")
+
+                    if a_score > profile.optimal_audio_score or profile.optimal_audio_path is None:
+                        optimal_wav = os.path.join(avatar_dir, "processed", "optimal_voice_prompt.wav")
+                        self._slice_optimal_audio(extracted_audio_path, optimal_wav, target_duration=7.5)
+                        profile.optimal_audio_path = optimal_wav
+                        profile.optimal_audio_score = a_score
+                        print(f"[✓] Upgraded avatar optimal voice prompt! New score: {a_score:.2f}")
+
+                    profile.raw_assets.append(
+                        MediaAsset(
+                            file_path=extracted_audio_path,
+                            media_type="audio",
+                            quality_score=a_score,
+                            timestamp=datetime.now(timezone.utc).isoformat(),
+                            metrics=a_metrics,
+                            original_filename=f"{orig_name} (Extracted Audio)",
+                        )
+                    )
+                except Exception as e:
+                    print(f"[-] Video audio extraction note: {e}")
+
         # 3. Append to raw assets log and persist profile
         asset_record = MediaAsset(
             file_path=raw_dest_path,
             media_type=media_type,
             quality_score=score,
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             metrics=metrics,
             original_filename=orig_name
         )

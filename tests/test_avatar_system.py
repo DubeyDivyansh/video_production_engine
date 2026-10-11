@@ -63,6 +63,13 @@ class TestAvatarProfile(unittest.TestCase):
             self.assertIn("1\n00:00:00,000 -->", content)
             self.assertIn("Hello world", content)
 
+    def test_drive_id_extraction(self):
+        url = "https://drive.google.com/file/d/1yCoOYz-Q-pzAaDYEWJUV1RihuiYJGQX2/view?usp=sharing"
+        import re
+        match = re.search(r"[-_\w]{25,}", url)
+        self.assertIsNotNone(match)
+        self.assertEqual(match.group(0), "1yCoOYz-Q-pzAaDYEWJUV1RihuiYJGQX2")
+
 
 @unittest.skipUnless(FULL_DEPS_AVAILABLE, "Requires numpy, soundfile, and cv2")
 class TestAvatarIntegration(unittest.TestCase):
