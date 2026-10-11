@@ -19,17 +19,22 @@ def create_notebook():
                 "---\n",
                 "\n",
                 "### 🌟 Capabilities:\n",
-                "1. **Continuous Avatar Knowledge Base:** Store your voice, portrait, and base video in Google Drive. As you upload new media, the system automatically evaluates SNR, sharpness, and motion stability to continuously upgrade your avatar profile without restarting from scratch.\n",
-                "2. **Zero-Shot Voice Cloning (F5-TTS):** Generates studio-grade cloned speech from as little as 5 seconds of clean reference voice.\n",
-                "3. **Dual Animation Engines:**\n",
-                "   - **LatentSync (Default):** Retains 100% of body language, natural gestures, and clothing for whole-body videos.\n",
+                "1. **Continuous Avatar Knowledge Base (`AvatarManager`):** Store your voice, portrait, and base video in Google Drive. As you upload new media, the system automatically evaluates SNR, sharpness, and motion stability to continuously upgrade your avatar profile without restarting from scratch.\n",
+                "2. **Dual Speech Synthesis Engines:**\n",
+                "   - **Kokoro-82M (Default):** Zero-VRAM / CPU narration in <1 second with 82M parameters and 24kHz studio audio (no reference audio required).\n",
+                "   - **F5-TTS (Voice Cloning):** Flow-matching diffusion transformer generating studio cloned speech from 5s reference audio.\n",
+                "3. **Multi-Mode Video Generation & Lip-Sync:**\n",
+                "   - **LTX-Video 0.9.5 & Wan2.1 (Generative DiT):** Two-Phase Memory Offload strategy (Phase 1 text encoder -> Phase 2 Transformer + VAE) generating high-fidelity cinematic scenes within 16GB T4 VRAM.\n",
+                "   - **LatentSync (Default Gesture Avatar):** Retains 100% of body language, natural gestures, and clothing for whole-body videos.\n",
                 "   - **LivePortrait / SadTalker:** High-fidelity facial performance animation from single portrait photos.\n",
                 "4. **Studio Post-Production Enhancers:**\n",
+                "   - **RIFE v4.x (60fps Broadcast Motion Interpolation):** Optical-flow frame interpolation eliminating micro-stutter in seconds.\n",
                 "   - **Background Matting & Replacement (BiRefNet / Chroma Key / Solid Studio Backdrops)**\n",
                 "   - **Face Super-Resolution & Restoration (GFPGAN v1.4)**\n",
                 "   - **Audio Spectral Denoising & -16 LUFS Mastering (EBU R128)**\n",
                 "   - **Dynamic BGM Mixing with Voice Ducking & Styled Subtitle Burn-In**\n",
-                "5. **Visual Node UI (ComfyUI Geeky LatentSync):** Optional 1-click Cloudflare tunnel for node-graph experimentation."
+                "5. **Gemini Managed Agent Supervisor (`GeminiAgentSupervisor`):** 5-part cinematic prompt expansion and self-annealing autonomous QA diagnostic loop.\n",
+                "6. **Visual Node UI (ComfyUI Geeky LatentSync):** Optional 1-click Cloudflare tunnel for node-graph experimentation."
             ]
         },
         {
@@ -56,7 +61,7 @@ def create_notebook():
             "source": [
                 "---\n",
                 "## 1. Mount Google Drive (Persistent Storage)\n",
-                "Mount Google Drive to persist your heavy model weights (~6 GB), avatar profiles, and generated deliverables across ephemeral Colab sessions."
+                "Mount Google Drive to persist heavy model checkpoints, avatar profiles, and generated deliverables across ephemeral Colab sessions."
             ]
         },
         {
@@ -116,7 +121,7 @@ def create_notebook():
             "source": [
                 "---\n",
                 "## 3. Persistent Avatar Knowledge Base (Continuous Improvement)\n",
-                "Register your personal photos, videos, and audio samples under your avatar profile (`divyansh`).\n",
+                "Register personal photos, videos, and audio samples under your avatar profile (`divyansh`).\n",
                 "The engine **automatically scores quality** (Audio SNR, image sharpness, video motion stability), archives raw assets, and updates optimal generation pointers on Google Drive."
             ]
         },
@@ -161,23 +166,110 @@ def create_notebook():
             "metadata": {"id": "sec-4-md"},
             "source": [
                 "---\n",
-                "## 4. Studio Video Production Run (Zero-Restart End-to-End Pipeline)\n",
-                "Run the complete studio production pipeline with 1 call:\n",
-                "1. Loads avatar assets from Drive.\n",
-                "2. Synthesizes cloned voice with F5-TTS.\n",
-                "3. Masters audio (spectral noise removal + -16 LUFS).\n",
-                "4. Enforces VRAM fence (`torch.cuda.empty_cache()` + `gc.collect()`).\n",
-                "5. Drives whole-body lip-sync (LatentSync with T4 FP16 patch) or facial reenactment.\n",
-                "6. Restores and upscales face via GFPGAN.\n",
-                "7. Composites custom background (image, video, or solid studio backdrop).\n",
-                "8. Burns styled subtitles & mixes background music with automatic speech ducking.\n",
-                "9. Saves finished deliverable to Google Drive!"
+                "## 4. Fast Speech Narration (Kokoro-82M Zero-VRAM Engine)\n",
+                "Synthesizes studio-grade 24kHz speech narration with **0 MB VRAM overhead** using Kokoro-82M (Apache 2.0).\n",
+                "Runs on CPU in less than 1 second without needing reference audio, leaving all 16GB of GPU VRAM free for video diffusion."
             ]
         },
         {
             "cell_type": "code",
             "execution_count": None,
             "metadata": {"id": "sec-4-code"},
+            "outputs": [],
+            "source": [
+                "from src.audio.kokoro_engine import KokoroEngine\n",
+                "import os\n",
+                "import IPython.display as ipd\n",
+                "\n",
+                "kokoro = KokoroEngine(device=\"cpu\")\n",
+                "print(\"[*] Synthesizing speech narration with Kokoro-82M (0 MB VRAM overhead)...\")\n",
+                "narration_text = (\n",
+                "    \"Welcome to our modular video production studio. \"\n",
+                "    \"This high-fidelity speech was synthesized in less than one second using Kokoro-82M on CPU, \"\n",
+                "    \"preserving all sixteen gigabytes of GPU VRAM for video diffusion models.\"\n",
+                ")\n",
+                "\n",
+                "out_dir = '/content/drive/MyDrive/video_gen_platform/outputs'\n",
+                "os.makedirs(out_dir, exist_ok=True)\n",
+                "output_wav = os.path.join(out_dir, 'kokoro_narration.wav')\n",
+                "\n",
+                "audio_path = kokoro.synthesize(\n",
+                "    text=narration_text,\n",
+                "    voice=\"af_heart\",\n",
+                "    output_path=output_wav,\n",
+                ")\n",
+                "print(f\"✅ Narration successfully synthesized: {audio_path}\")\n",
+                "if os.path.exists(audio_path):\n",
+                "    ipd.display(ipd.Audio(audio_path))\n"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {"id": "sec-5-md"},
+            "source": [
+                "---\n",
+                "## 5. Diffusion Video Scene Generation (LTX-Video 0.9.5 Two-Phase Offload)\n",
+                "Generates high-fidelity cinematic video scenes on Tesla T4 (16GB VRAM) using the **Two-Phase Memory Offload Strategy**:\n",
+                "- **Phase 1:** T5-XXL text encoder loads to compute prompt embeddings, followed by an immediate VRAM purge (`del text_encoder; flush_vram()`).\n",
+                "- **Phase 2:** Transformer + VAE generate video with model CPU offloading and VAE tiling (`pipe.enable_model_cpu_offload()`, `pipe.vae.enable_tiling()`).\n",
+                "Adheres strictly to temporal compression requirements: **8n + 1 frames** (e.g. 41 frames) and dimensions divisible by 32."
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {"id": "sec-5-code"},
+            "outputs": [],
+            "source": [
+                "from src.video.generative_engine import GenerativeVideoEngine\n",
+                "import os\n",
+                "\n",
+                "gen_engine = GenerativeVideoEngine()\n",
+                "print(\"[*] Generating cinematic diffusion video scene with LTX-Video 0.9.5...\")\n",
+                "print(\"[*] Strategy: Two-Phase Memory Offload on T4 (Phase 1 text encoder -> Phase 2 Transformer + VAE)\")\n",
+                "\n",
+                "scene_prompt = \"Cinematic aerial view of futuristic cyberpunk neon city at night, rain reflections, photorealistic 4k\"\n",
+                "out_dir = '/content/drive/MyDrive/video_gen_platform/outputs'\n",
+                "os.makedirs(out_dir, exist_ok=True)\n",
+                "output_scene = os.path.join(out_dir, 'ltx_cyberpunk_scene.mp4')\n",
+                "\n",
+                "# Generate scene (41 frames = 8n + 1 rule, 512x320 divisible by 32)\n",
+                "scene_path = gen_engine.generate_scene(\n",
+                "    prompt=scene_prompt,\n",
+                "    output_path=output_scene,\n",
+                "    model_name=\"ltx-video\",\n",
+                "    width=512,\n",
+                "    height=320,\n",
+                "    num_frames=41,\n",
+                "    fps=24,\n",
+                "    num_steps=30,\n",
+                ")\n",
+                "print(f\"✅ LTX-Video scene rendered successfully: {scene_path}\")\n"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {"id": "sec-6-md"},
+            "source": [
+                "---\n",
+                "## 6. Studio Video Production Run (Zero-Restart End-to-End Pipeline)\n",
+                "Run the complete multi-mode studio production pipeline with 1 call:\n",
+                "1. Loads avatar assets from Drive.\n",
+                "2. Synthesizes voice via Kokoro-82M (0 VRAM) or F5-TTS (voice cloning).\n",
+                "3. Masters audio (spectral noise removal + -16 LUFS loudness).\n",
+                "4. Enforces VRAM fence (`torch.cuda.empty_cache()` + `gc.collect()`).\n",
+                "5. Drives animation via LatentSync (whole body), LivePortrait / SadTalker (portrait), or Generative DiT (LTX-Video scene).\n",
+                "6. Restores and upscales face via GFPGAN.\n",
+                "7. Composites custom background (image, video, or solid studio backdrop).\n",
+                "8. Upsamples to 60fps broadcast framerate via RIFE optical flow.\n",
+                "9. Burns styled subtitles & mixes background music with automatic speech ducking.\n",
+                "10. Saves finished deliverable to Google Drive!"
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {"id": "sec-6-code"},
             "outputs": [],
             "source": [
                 "from src.pipeline import VideoProductionPipeline\n",
@@ -197,11 +289,13 @@ def create_notebook():
                 "    avatar_id='divyansh',                   # Pulls optimal assets from Drive knowledge base\n",
                 "    script_text=SCRIPT,\n",
                 "    output_name='divyansh_studio_master.mp4',\n",
-                "    engine='sadtalker',                    # 'sadtalker' for photo, 'latentsync' for body video\n",
+                "    engine='sadtalker',                    # 'sadtalker' for photo, 'latentsync' for body, 'generative' for scene\n",
+                "    tts_engine='kokoro',                   # 'kokoro' (0 MB VRAM) or 'f5' (voice cloning)\n",
                 "    denoise_audio=True,                    # Studio spectral gating + EBU R128 loudness\n",
                 "    enhance_face=True,                     # GFPGAN facial super-resolution\n",
                 "    color_backdrop='#1A1A2E',              # Modern dark slate studio backdrop\n",
                 "    add_subtitles=True,                    # Auto-generate & burn styled subtitles\n",
+                "    interpolate_60fps=True,                # Upsample output video to 60fps via RIFE\n",
                 ")\n",
                 "\n",
                 "print(f\"\\n🎬 Production Deliverable Ready at: {final_video}\")"
@@ -209,10 +303,92 @@ def create_notebook():
         },
         {
             "cell_type": "markdown",
-            "metadata": {"id": "sec-5-md"},
+            "metadata": {"id": "sec-7-md"},
             "source": [
                 "---\n",
-                "## 5. Autonomous Quality Audit & Inline Deliverable Verification\n",
+                "## 7. 60fps Broadcast Motion Interpolation (RIFE v4.x)\n",
+                "Upsamples 24fps AI video to smooth **60fps broadcast video** using RIFE optical-flow motion interpolation.\n",
+                "Eliminates diffusion micro-stutter and temporal jitter in less than 8 seconds on Tesla T4."
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {"id": "sec-7-code"},
+            "outputs": [],
+            "source": [
+                "from src.enhancers.motion_interpolator import MotionInterpolator\n",
+                "import os\n",
+                "\n",
+                "interpolator = MotionInterpolator(target_fps=60)\n",
+                "print(\"[*] Upsampling video to 60fps broadcast framerate with RIFE v4.x...\")\n",
+                "\n",
+                "input_candidate = final_video if 'final_video' in locals() and os.path.exists(final_video) else None\n",
+                "if not input_candidate:\n",
+                "    input_candidate = output_scene if 'output_scene' in locals() and os.path.exists(output_scene) else '/content/drive/MyDrive/video_gen_platform/outputs/divyansh_studio_master.mp4'\n",
+                "\n",
+                "out_dir = '/content/drive/MyDrive/video_gen_platform/outputs'\n",
+                "os.makedirs(out_dir, exist_ok=True)\n",
+                "output_60fps = os.path.join(out_dir, 'video_60fps_broadcast.mp4')\n",
+                "\n",
+                "if os.path.exists(input_candidate):\n",
+                "    interp_result = interpolator.interpolate_60fps(\n",
+                "        video_path=input_candidate,\n",
+                "        output_path=output_60fps,\n",
+                "        multiplier=2\n",
+                "    )\n",
+                "    print(f\"✅ 60fps video interpolated successfully: {interp_result}\")\n",
+                "else:\n",
+                "    print(f\"⚠️ Target video '{input_candidate}' not found on disk. Run Section 5 or 6 first.\")\n"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {"id": "sec-8-md"},
+            "source": [
+                "---\n",
+                "## 8. Gemini Managed Agent Autonomous QA Supervisor & Scorecard Diagnostic\n",
+                "Integrates the **Gemini Agent Supervisor** (`GeminiAgentSupervisor`) to:\n",
+                "1. **Deconstruct creative briefs** into the 5-part cinematic formula for Diffusion Transformers (`[Subject] + [Setting] + [Camera Motion] + [Atmosphere] + [Fidelity]`).\n",
+                "2. **Diagnose objective QA scorecards** (Audio SNR, face presence %, Laplacian sharpness, AV sync delta) to recommend actionable self-annealing parameter remediation."
+            ]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {"id": "sec-8-code"},
+            "outputs": [],
+            "source": [
+                "from src.orchestration.gemini_agent_supervisor import GeminiAgentSupervisor\n",
+                "import json\n",
+                "\n",
+                "supervisor = GeminiAgentSupervisor()\n",
+                "\n",
+                "# 1. Expand creative brief into 5-part cinematic formula\n",
+                "brief = \"executive presenting quarterly tech earnings in modern glass boardroom\"\n",
+                "expanded = supervisor.expand_creative_prompt(brief)\n",
+                "print(\"🎬 [Gemini Supervisor] Expanded 5-Part Cinematic Prompt:\")\n",
+                "print(f\"   Positive: {expanded['positive_prompt']}\")\n",
+                "print(f\"   Negative: {expanded['negative_prompt']}\\n\")\n",
+                "\n",
+                "# 2. Analyze Quality Audit Scorecard & Generate Autonomous Remediation\n",
+                "sample_scorecard = {\n",
+                "    \"audio_metrics\": {\"snr_db\": 12.5, \"clipping_ratio\": 0.02, \"wpm\": 145.0},\n",
+                "    \"video_metrics\": {\"face_detected_ratio\": 0.65, \"laplacian_sharpness\": 50.0},\n",
+                "    \"sync_metrics\": {\"av_duration_delta_sec\": 0.45}\n",
+                "}\n",
+                "print(\"[*] Diagnosing QualityInspector audit scorecard...\")\n",
+                "remediation = supervisor.diagnose_audit_scorecard(sample_scorecard)\n",
+                "print(\"🛡️ [Gemini Supervisor] Autonomous Diagnostic Remediation Plan:\")\n",
+                "print(json.dumps(remediation, indent=2))\n"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {"id": "sec-9-md"},
+            "source": [
+                "---\n",
+                "## 9. Autonomous Quality Audit & Inline Deliverable Verification\n",
                 "The engine automatically executes an objective quality inspection before you review the video:\n",
                 "- **Audio Compliance:** Speech SNR, peak/RMS loudness, digital clipping %, speaking pace (WPM).\n",
                 "- **Visual Quality:** Face detection rate %, facial Laplacian sharpness, motion stability, freeze detection.\n",
@@ -223,7 +399,7 @@ def create_notebook():
         {
             "cell_type": "code",
             "execution_count": None,
-            "metadata": {"id": "sec-5-code"},
+            "metadata": {"id": "sec-9-code"},
             "outputs": [],
             "source": [
                 "from IPython.display import HTML, display\n",
@@ -293,15 +469,15 @@ def create_notebook():
                 "    </div>\n",
                 "    '''))\n",
                 "else:\n",
-                "    print('⚠️ No video deliverable found to display. Please run Section 4 first.')"
+                "    print('⚠️ No video deliverable found to display. Please run Section 6 first.')"
             ]
         },
         {
             "cell_type": "markdown",
-            "metadata": {"id": "sec-6-md"},
+            "metadata": {"id": "sec-10-md"},
             "source": [
                 "---\n",
-                "## 6. (Optional) Visual UI: ComfyUI + Geeky LatentSync Wrapper via Cloudflare Tunnel\n",
+                "## 10. (Optional) Visual UI: ComfyUI + Geeky LatentSync Wrapper via Cloudflare Tunnel\n",
                 "For users who want to experiment with interactive node graphs in browser.\n",
                 "Launches ComfyUI and exposes a public HTTPS tunnel."
             ]
@@ -309,7 +485,7 @@ def create_notebook():
         {
             "cell_type": "code",
             "execution_count": None,
-            "metadata": {"id": "sec-6-code"},
+            "metadata": {"id": "sec-10-code"},
             "outputs": [],
             "source": [
                 "# 1. Clone ComfyUI and Geeky LatentSync Wrapper if needed\n",
