@@ -142,10 +142,11 @@ class TestMotionInterpolator(unittest.TestCase):
                 f.write(b"mock raw video bytes")
 
             # Should not crash, but fallback gracefully and create output container
-            result = interpolator.interpolate_60fps(
-                video_path=input_video,
-                output_path=output_video,
-            )
+            with self.assertLogs("src.enhancers.motion_interpolator", level="WARNING"):
+                result = interpolator.interpolate_60fps(
+                    video_path=input_video,
+                    output_path=output_video,
+                )
 
             self.assertEqual(result, output_video)
             self.assertTrue(os.path.exists(output_video))
@@ -169,10 +170,11 @@ class TestMotionInterpolator(unittest.TestCase):
             with open(input_video, "wb") as f:
                 f.write(b"fallback stream bytes")
 
-            result = interpolator.interpolate_60fps(
-                video_path=input_video,
-                output_path=output_video,
-            )
+            with self.assertLogs("src.enhancers.motion_interpolator", level="WARNING"):
+                result = interpolator.interpolate_60fps(
+                    video_path=input_video,
+                    output_path=output_video,
+                )
 
             self.assertEqual(result, output_video)
             self.assertTrue(os.path.exists(output_video))
