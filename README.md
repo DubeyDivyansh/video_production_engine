@@ -207,8 +207,15 @@ We evaluated running GeekyGhost's `ComfyUI-Geeky-LatentSyncWrapper` on Colab Fre
   * **ComfyUI WebUI (Optional):** Slower startup (6–8 minutes on fresh Colab), higher risk of OOM if extra nodes are attached, but gives visual drag-and-drop node graph.
   * **Verdict:** We provide the **Headless Python Pipeline as the primary production engine**, and include a 1-click ComfyUI launch cell in Section 6 of `quick_demo.ipynb` for visual exploration.
 
+## ⚡ Colab Resource Optimization & Limits Guide
+
+For complete details on navigating Google Colab's **90-minute idle timeouts**, **12-hour hard VM caps**, **3.5–5 hour daily GPU allocations**, **multi-account Drive sharing rotation**, and zero-waste memory fencing:
+
+👉 **Read the full blueprint:** [docs/COLAB_RESOURCE_OPTIMIZATION_GUIDE.md](docs/COLAB_RESOURCE_OPTIMIZATION_GUIDE.md)
+
 ---
 
 ## 🤖 Agentic Directive
 
 For AI assistants and autonomous coding agents working on this repository, please review [`GEMINI.md`](GEMINI.md) for architectural rules, VRAM budget thresholds, and execution protocols.
+
