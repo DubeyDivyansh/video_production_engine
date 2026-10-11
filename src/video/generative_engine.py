@@ -167,6 +167,8 @@ class GenerativeVideoEngine:
                     model_id_or_path,
                     torch_dtype=torch.bfloat16,
                 )
+                if hasattr(pipe, "text_encoder") and pipe.text_encoder is not None:
+                    pipe.text_encoder.to("cuda")
 
                 prompt_embeds, prompt_attention_mask, neg_embeds, neg_attention_mask = (
                     pipe.encode_prompt(
@@ -177,7 +179,10 @@ class GenerativeVideoEngine:
                 )
 
                 # Purge text encoder to free ~9GB VRAM on T4
-                del pipe.text_encoder, pipe.tokenizer
+                if hasattr(pipe, "text_encoder"):
+                    pipe.text_encoder = None
+                if hasattr(pipe, "tokenizer"):
+                    pipe.tokenizer = None
                 flush_vram(verbose=True)
 
                 # Phase 2: Configure Transformer & VAE with CPU offload and tiling
@@ -257,13 +262,18 @@ class GenerativeVideoEngine:
                     model_id_or_path,
                     torch_dtype=torch.bfloat16,
                 )
+                if hasattr(pipe, "text_encoder") and pipe.text_encoder is not None:
+                    pipe.text_encoder.to("cuda")
 
                 prompt_embeds, neg_embeds = pipe.encode_prompt(
                     prompt=prompt,
                     negative_prompt=negative_prompt,
                 )
 
-                del pipe.text_encoder, pipe.tokenizer
+                if hasattr(pipe, "text_encoder"):
+                    pipe.text_encoder = None
+                if hasattr(pipe, "tokenizer"):
+                    pipe.tokenizer = None
                 flush_vram(verbose=True)
 
                 print("[Wan2.1 Phase 2] Generating video frames with Transformer + VAE...")
