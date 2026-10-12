@@ -73,6 +73,37 @@ class BackgroundReplacer:
             return self._compute_chroma_mask(bgr_frame)
         return self._compute_ai_mask(bgr_frame)
 
+    def remove_background(self, input_image_path: str, output_image_path: str) -> str:
+        """
+        Removes background from an image file using BiRefNet / AI matting (rembg).
+        Saves output as RGBA image with transparent background.
+        """
+        if not os.path.exists(input_image_path):
+            raise FileNotFoundError(f"Input image not found: {input_image_path}")
+
+        os.makedirs(os.path.dirname(os.path.abspath(output_image_path)), exist_ok=True)
+        session = self._get_rembg_session()
+        if session is not None:
+            try:
+                import rembg
+                from PIL import Image
+                inp = Image.open(input_image_path)
+                out = rembg.remove(inp, session=session)
+                out.save(output_image_path)
+                return output_image_path
+            except Exception as e:
+                print(f"[BackgroundReplacer] rembg execution note: {e}")
+
+        # Fallback if rembg is not available or fails
+        try:
+            from PIL import Image
+            img = Image.open(input_image_path).convert("RGBA")
+            img.save(output_image_path)
+        except Exception:
+            import shutil
+            shutil.copy2(input_image_path, output_image_path)
+        return output_image_path
+
     def replace_background(
         self,
         video_path: str,

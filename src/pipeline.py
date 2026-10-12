@@ -226,6 +226,7 @@ class VideoProductionPipeline:
                         duration_s=duration_s,
                         output_video_path=synth_video_path,
                         motion_mode=motion_mode,
+                        matting_enhancer=self.bg_replacer,
                     )
                     base_video_path = synth_video_path
                 else:
