@@ -42,6 +42,7 @@ class VerificationReport:
     audio_metrics: Dict[str, Any] = field(default_factory=dict)
     video_metrics: Dict[str, Any] = field(default_factory=dict)
     sync_metrics: Dict[str, Any] = field(default_factory=dict)
+    visual_watch_metrics: Dict[str, Any] = field(default_factory=dict)
     warnings: List[str] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
     remediations: List[str] = field(default_factory=list)
@@ -75,6 +76,12 @@ class VerificationReport:
         if self.sync_metrics:
             s = self.sync_metrics
             print(f"⚡ AV Sync: Duration Delta: {s.get('av_duration_delta', 0):.3f}s")
+
+        if self.visual_watch_metrics:
+            w = self.visual_watch_metrics
+            print(f"👁️ Visual Watch: Cuts: {w.get('cuts_count', 0)} ({w.get('cuts_per_minute', 0):.1f} cuts/min) | Static: {w.get('is_static_footage', False)}")
+            if w.get('hero_frames'):
+                print(f"   Hero Keyframes: {len(w['hero_frames'])} frames extracted")
 
         if self.warnings:
             print("\n⚠️ Warnings:")
@@ -395,6 +402,7 @@ class QualityInspector:
         speech_wav_path: Optional[str] = None,
         script_text: str = "",
         save_report: bool = True,
+        run_visual_watch: bool = False,
     ) -> VerificationReport:
         """
         Executes a complete autonomous audit on the generated video deliverable.
@@ -439,6 +447,19 @@ class QualityInspector:
                 "Mouth movement is absent while speech is playing. Execute 03_fullbody_latentsync_studio.ipynb "
                 "on Google Colab GPU (Tesla T4) to synthesize neural LatentSync lip-sync."
             )
+
+        # 2c. Optional Visual Watch analysis (scene-changes, hero frames, hook microscope)
+        visual_watch_m = {}
+        if run_visual_watch and os.path.exists(video_path):
+            try:
+                from .visual_watcher import VisualWatcher
+                watcher = VisualWatcher()
+                v_res = watcher.watch_video(video_path)
+                visual_watch_m = v_res.to_dict()
+                if v_res.is_static_footage:
+                    all_warnings.append("Visual Watcher: Video footage classified as static / single continuous shot without scene progression.")
+            except Exception as e:
+                all_warnings.append(f"Visual Watcher notice: {e}")
 
         # Cleanup temp audio
         if temp_wav and os.path.exists(temp_wav):
@@ -508,6 +529,7 @@ class QualityInspector:
             audio_metrics=audio_m,
             video_metrics=video_m,
             sync_metrics=sync_m,
+            visual_watch_metrics=visual_watch_m,
             warnings=all_warnings,
             errors=all_errors,
             remediations=remediations,
