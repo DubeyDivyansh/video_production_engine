@@ -200,7 +200,11 @@ def create_02_talking_head_notebook() -> dict:
     return {
         "cells": cells,
         "metadata": {
-            "colab": {"provenance": []},
+            "accelerator": "GPU",
+            "colab": {
+                "gpuType": "T4",
+                "provenance": []
+            },
             "kernelspec": {"display_name": "Python 3", "name": "python3"},
             "language_info": {"name": "python"}
         },
@@ -357,7 +361,11 @@ def create_03_fullbody_latentsync_notebook() -> dict:
     return {
         "cells": cells,
         "metadata": {
-            "colab": {"provenance": []},
+            "accelerator": "GPU",
+            "colab": {
+                "gpuType": "T4",
+                "provenance": []
+            },
             "kernelspec": {"display_name": "Python 3", "name": "python3"},
             "language_info": {"name": "python"}
         },
