@@ -7,7 +7,7 @@
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DubeyDivyansh/video_production_engine/blob/main/quick_demo.ipynb)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Hardware Target](https://img.shields.io/badge/Hardware-NVIDIA_Tesla_T4_(16GB)-76B900?logo=nvidia&logoColor=white)](https://cloud.google.com/)
-[![Repository: Private](https://img.shields.io/badge/Visibility-Private-red.svg)](https://github.com/DubeyDivyansh/video_production_engine)
+[![Repository: Public](https://img.shields.io/badge/Visibility-Public-green.svg)](https://github.com/DubeyDivyansh/video_production_engine)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 <p align="center">
@@ -259,6 +259,14 @@ We evaluated running GeekyGhost's `ComfyUI-Geeky-LatentSyncWrapper` on Colab Fre
 For complete details on navigating Google Colab's **90-minute idle timeouts**, **12-hour hard VM caps**, **3.5–5 hour daily GPU allocations**, **multi-account Drive sharing rotation**, and zero-waste memory fencing:
 
 👉 **Read the full blueprint:** [docs/COLAB_RESOURCE_OPTIMIZATION_GUIDE.md](docs/COLAB_RESOURCE_OPTIMIZATION_GUIDE.md)
+
+---
+
+## 🚀 Scalability & Future Roadmap
+
+For the detailed multi-cloud compute architecture, Kaggle backend integration (30h/wk dual T4 GPUs, headless REST API, and zero-download dataset cold starts), and multi-cloud failover dispatcher:
+
+👉 **Read the full roadmap:** [FUTURE_IMPROVEMENTS.md](FUTURE_IMPROVEMENTS.md)
 
 ---
 
