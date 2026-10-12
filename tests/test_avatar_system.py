@@ -201,7 +201,56 @@ class TestQualityInspector(unittest.TestCase):
             report_file = os.path.join(tmp_dir, "mock_video_quality_audit.json")
             self.assertTrue(os.path.exists(report_file))
 
+    def _create_synthetic_video(self, file_path: str, duration_sec: float = 2.0, fps: int = 10, dynamic_lips: bool = False):
+        import subprocess
+        import numpy as np
+        h, w = 160, 160
+        num_frames = int(duration_sec * fps)
+        frames = []
+        for i in range(num_frames):
+            frame = np.ones((h, w), dtype=np.uint8) * 220
+            # Center face area
+            frame[30:130, 40:120] = 140
+            # Mouth region around y: 100:115, x: 65:95
+            val = int(140 + 80 * np.sin(i * 0.8)) if dynamic_lips else 70
+            frame[100:115, 65:95] = val
+            frames.append(frame)
+        raw = b"".join([f.tobytes() for f in frames])
+        cmd = [
+            "ffmpeg", "-y", "-f", "rawvideo", "-pix_fmt", "gray",
+            "-s", f"{w}x{h}", "-r", str(fps), "-i", "-",
+            "-pix_fmt", "yuv420p", file_path
+        ]
+        subprocess.run(cmd, input=raw, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+
+    def test_lip_motion_gate_flags_static_face(self):
+        inspector = self.QualityInspector()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            wav_path = os.path.join(tmp_dir, "speech.wav")
+            video_path = os.path.join(tmp_dir, "static_face.mp4")
+            self._create_synthetic_wav(wav_path, duration_sec=2.0)
+            self._create_synthetic_video(video_path, duration_sec=2.0, dynamic_lips=False)
+
+            report = inspector.audit_deliverable(video_path=video_path, speech_wav_path=wav_path)
+            self.assertFalse(report.video_metrics.get("lip_motion_detected", True))
+            self.assertTrue(any("LIP_MOTION_ABSENT" in err for err in report.errors))
+            self.assertTrue(any("LatentSync" in rem for rem in report.remediations))
+            self.assertEqual(report.status, "FAILED")
+
+    def test_lip_motion_gate_passes_dynamic_face(self):
+        inspector = self.QualityInspector()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            wav_path = os.path.join(tmp_dir, "speech.wav")
+            video_path = os.path.join(tmp_dir, "dynamic_face.mp4")
+            self._create_synthetic_wav(wav_path, duration_sec=2.0)
+            self._create_synthetic_video(video_path, duration_sec=2.0, dynamic_lips=True)
+
+            report = inspector.audit_deliverable(video_path=video_path, speech_wav_path=wav_path)
+            self.assertTrue(report.video_metrics.get("lip_motion_detected", False))
+            self.assertFalse(any("LIP_MOTION_ABSENT" in err for err in report.errors))
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

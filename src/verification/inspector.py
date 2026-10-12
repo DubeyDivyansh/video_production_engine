@@ -20,12 +20,18 @@ from typing import Dict, List, Optional, Tuple, Any
 
 try:
     import cv2
-    import numpy as np
     CV2_AVAILABLE = True
 except ImportError:
     cv2 = None
-    np = None
     CV2_AVAILABLE = False
+
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    np = None
+    NUMPY_AVAILABLE = False
+
 
 
 @dataclass
@@ -216,78 +222,144 @@ class QualityInspector:
         except Exception as e:
             warnings.append(f"ffprobe stream inspection warning: {e}")
 
-        # 2. OpenCV frame sampling (if cv2 available)
+        # 2. Frame sampling (via OpenCV or FFmpeg rawvideo fallback)
+        frames = []
         if CV2_AVAILABLE and os.path.exists(video_path):
             try:
                 cap = cv2.VideoCapture(video_path)
                 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
                 if total_frames > 0:
-                    face_cascade = cv2.CascadeClassifier(
-                        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-                    )
-
                     sample_count = min(25, total_frames)
                     step = max(1, total_frames // sample_count)
-
-                    faces_detected = 0
-                    sharpness_scores = []
-                    flow_magnitudes = []
-                    prev_gray = None
-                    frozen_frames = 0
-
                     for i in range(0, total_frames, step):
                         cap.set(cv2.CAP_PROP_POS_FRAMES, i)
                         ret, frame = cap.read()
                         if not ret:
                             break
+                        frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
+                    cap.release()
+            except Exception as e:
+                warnings.append(f"OpenCV visual analysis warning: {e}")
 
-                        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        # Fallback to FFmpeg frame extraction if cv2 is unavailable or extracted 0 frames
+        if not frames and os.path.exists(video_path):
+            try:
+                cmd = [
+                    "ffmpeg", "-v", "error",
+                    "-i", video_path,
+                    "-vf", "fps=5,scale=256:256",
+                    "-f", "rawvideo",
+                    "-pix_fmt", "gray",
+                    "-",
+                ]
+                res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=True)
+                if res.stdout and np is not None:
+                    raw_arr = np.frombuffer(res.stdout, dtype=np.uint8).reshape(-1, 256, 256)
+                    frames = [raw_arr[idx] for idx in range(len(raw_arr))]
+            except Exception as e:
+                warnings.append(f"FFmpeg frame sampling notice: {e}")
 
-                        # Sharpness (Laplacian variance)
+        # Process sampled frames
+        if frames and np is not None:
+            try:
+                face_cascade = None
+                if CV2_AVAILABLE:
+                    try:
+                        face_cascade = cv2.CascadeClassifier(
+                            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+                        )
+                    except Exception:
+                        face_cascade = None
+
+                sharpness_scores = []
+                flow_magnitudes = []
+                mouth_deltas = []
+                head_deltas = []
+                faces_detected = 0
+                frozen_frames = 0
+                prev_gray = None
+
+                for gray in frames:
+                    fh, fw = gray.shape[:2]
+
+                    # Sharpness calculation
+                    if CV2_AVAILABLE:
                         var = cv2.Laplacian(gray, cv2.CV_64F).var()
-                        sharpness_scores.append(var)
+                    else:
+                        lap = gray[1:-1, 1:-1].astype(float) * 4 - gray[:-2, 1:-1].astype(float) - gray[2:, 1:-1].astype(float) - gray[1:-1, :-2].astype(float) - gray[1:-1, 2:].astype(float)
+                        var = float(np.var(lap))
+                    sharpness_scores.append(var)
 
-                        # Face presence detection
+                    # Face presence
+                    face_box = None
+                    if face_cascade is not None:
                         faces = face_cascade.detectMultiScale(gray, 1.2, 4)
                         if len(faces) > 0:
                             faces_detected += 1
+                            face_box = faces[0]
+                    else:
+                        # Heuristic center portrait presence
+                        center_crop = gray[int(fh * 0.2) : int(fh * 0.6), int(fw * 0.3) : int(fw * 0.7)]
+                        if float(np.var(center_crop)) > 15.0:
+                            faces_detected += 1
+                            face_box = (int(fw * 0.25), int(fh * 0.15), int(fw * 0.5), int(fh * 0.6))
 
-                        # Motion / Freeze check
-                        if prev_gray is not None:
-                            diff = cv2.absdiff(prev_gray, gray)
-                            mean_diff = float(np.mean(diff))
-                            if mean_diff < 0.3:  # frozen frame
-                                frozen_frames += 1
-                            else:
-                                flow = cv2.calcOpticalFlowFarneback(
-                                    prev_gray, gray, None, 0.5, 3, 15, 3, 5, 1.2, 0
-                                )
-                                mag, _ = cv2.cartToPolar(flow[..., 0], flow[..., 1])
-                                flow_magnitudes.append(float(np.mean(mag)))
+                    # Motion and Lip-motion analysis
+                    if prev_gray is not None:
+                        diff = np.abs(gray.astype(float) - prev_gray.astype(float))
+                        mean_diff = float(np.mean(diff))
+                        if mean_diff < 0.25:
+                            frozen_frames += 1
+                        else:
+                            flow_magnitudes.append(mean_diff)
 
-                        prev_gray = gray
+                        # Determine mouth and upper-face regions
+                        if face_box is not None:
+                            fx, fy, fw_b, fh_b = face_box
+                            m_y1, m_y2 = max(0, fy + int(fh_b * 0.60)), min(fh, fy + fh_b)
+                            m_x1, m_x2 = max(0, fx + int(fw_b * 0.20)), min(fw, fx + int(fw_b * 0.80))
+                            h_y1, h_y2 = max(0, fy + int(fh_b * 0.15)), min(fh, fy + int(fh_b * 0.45))
+                            h_x1, h_x2 = max(0, fx + int(fw_b * 0.20)), min(fw, fx + int(fw_b * 0.80))
+                        else:
+                            m_y1, m_y2 = int(fh * 0.55), int(fh * 0.78)
+                            m_x1, m_x2 = int(fw * 0.35), int(fw * 0.65)
+                            h_y1, h_y2 = int(fh * 0.20), int(fh * 0.45)
+                            h_x1, h_x2 = int(fw * 0.35), int(fw * 0.65)
 
-                    cap.release()
+                        mouth_patch = diff[m_y1:m_y2, m_x1:m_x2]
+                        head_patch = diff[h_y1:h_y2, h_x1:h_x2]
 
-                    actual_samples = len(sharpness_scores) if sharpness_scores else 1
-                    face_rate = (faces_detected / float(actual_samples)) * 100.0
-                    avg_sharpness = float(np.mean(sharpness_scores)) if sharpness_scores else 0.0
-                    avg_motion = float(np.mean(flow_magnitudes)) if flow_magnitudes else 1.0
+                        m_val = float(np.mean(mouth_patch)) if mouth_patch.size > 0 else 0.0
+                        h_val = float(np.mean(head_patch)) if head_patch.size > 0 else 0.0
+                        mouth_deltas.append(m_val)
+                        head_deltas.append(h_val)
 
-                    metrics["face_detection_rate"] = face_rate
-                    metrics["sharpness"] = avg_sharpness
-                    metrics["stability"] = max(0.0, 10.0 - abs(avg_motion - 1.5))
-                    metrics["frozen_frame_pct"] = (frozen_frames / float(actual_samples)) * 100.0
+                    prev_gray = gray
 
-                    if face_rate < 80.0:
-                        warnings.append(f"Face detected in only {face_rate:.1f}% of sampled frames (possible cropping issue).")
-                    if avg_sharpness < 70.0:
-                        warnings.append(f"Average frame sharpness is low ({avg_sharpness:.1f}); face may appear blurry.")
-                    if metrics["frozen_frame_pct"] > 30.0:
-                        warnings.append(f"High frozen frame ratio ({metrics['frozen_frame_pct']:.1f}%); video may appear static.")
+                actual_samples = len(sharpness_scores) if sharpness_scores else 1
+                face_rate = (faces_detected / float(actual_samples)) * 100.0
+                avg_sharpness = float(np.mean(sharpness_scores)) if sharpness_scores else 0.0
+                avg_motion = float(np.mean(flow_magnitudes)) if flow_magnitudes else 1.0
+                avg_lip_motion = float(np.mean(mouth_deltas)) if mouth_deltas else 0.0
+
+                metrics["face_detection_rate"] = face_rate
+                metrics["sharpness"] = avg_sharpness
+                metrics["stability"] = max(0.0, 10.0 - abs(avg_motion - 1.5))
+                metrics["frozen_frame_pct"] = (frozen_frames / float(actual_samples)) * 100.0
+                metrics["lip_motion_score"] = avg_lip_motion
+                metrics["lip_motion_detected"] = bool(avg_lip_motion >= 1.0)
+
+                if face_rate < 80.0:
+                    warnings.append(f"Face detected in only {face_rate:.1f}% of sampled frames (possible cropping issue).")
+                if avg_sharpness < 70.0:
+                    warnings.append(f"Average frame sharpness is low ({avg_sharpness:.1f}); face may appear blurry.")
+                if metrics["frozen_frame_pct"] > 30.0:
+                    warnings.append(f"High frozen frame ratio ({metrics['frozen_frame_pct']:.1f}%); video may appear static.")
+                if not metrics["lip_motion_detected"]:
+                    warnings.append(f"Low lip/mouth motion detected ({avg_lip_motion:.2f}); avatar mouth appears motionless.")
 
             except Exception as e:
-                warnings.append(f"OpenCV visual analysis warning: {e}")
+                warnings.append(f"Frame visual analysis notice: {e}")
 
         return metrics, warnings, errors
 
@@ -350,6 +422,23 @@ class QualityInspector:
 
         all_warnings.extend(a_warn + v_warn + s_warn)
         all_errors.extend(a_err + v_err + s_err)
+
+        # 2b. Lip motion realism gate during speech playback
+        is_speech_active = audio_m.get("duration", 0.0) >= 1.5
+        lip_detected = video_m.get("lip_motion_detected", False)
+        lip_score = video_m.get("lip_motion_score", 0.0)
+
+        if is_speech_active and not lip_detected:
+            lip_err = (
+                f"LIP_MOTION_ABSENT: Active speech is playing ({audio_m.get('duration', 0.0):.1f}s) "
+                f"but mouth/lip movement is undetectable (lip motion score: {lip_score:.2f} < 1.00). "
+                "Neural lip-sync required via LatentSync on Google Colab."
+            )
+            all_errors.append(lip_err)
+            remediations.append(
+                "Mouth movement is absent while speech is playing. Execute 03_fullbody_latentsync_studio.ipynb "
+                "on Google Colab GPU (Tesla T4) to synthesize neural LatentSync lip-sync."
+            )
 
         # Cleanup temp audio
         if temp_wav and os.path.exists(temp_wav):
