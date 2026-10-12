@@ -53,6 +53,10 @@ temp/
 !assets/
 !assets/**
 !divyansh_suit_body_pose.jpg
+!custom_audio.wav
+
+# Superpowers temporary artifacts
+.superpowers/
 
 
 # IDE & Editor configs
